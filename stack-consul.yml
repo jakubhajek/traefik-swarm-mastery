@@ -1,0 +1,52 @@
+# maintainer: jakub.hajek@cometari.com
+# docker stack deploy -c stack-consul.yml consul --with-registry-auth
+version: "3.7"
+
+services:
+  leader:
+    image: consul:1.5.0
+    command: agent -server -client=0.0.0.0 -bootstrap-expect=1 -ui
+    volumes:
+      - consul-data-leader-1:/consul/data
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true}'
+    networks:
+      - proxy-main
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.c.rule=Host(`consul.labs.cometari.eu`)"
+        - "traefik.http.routers.c.tls.certresolver=le"
+        - "traefik.http.routers.c.entrypoints=websecure"
+        - "traefik.http.services.c.loadbalancer.passhostheader=true"
+        - "traefik.http.services.c.loadbalancer.server.port=8500"
+        - "traefik.http.routers.c.middlewares=authconsul"
+        - "traefik.http.middlewares.authconsul.basicauth.users=admin:$$2y$$05$$1OX5jZ1Kpm/iVKE8tgUhu.STmPkgi0lLxVeP5yEcRioFdV4mcgdTu"
+
+  replica:
+    image: consul:1.5.0
+    command: agent -server -client=0.0.0.0 -retry-join "leader" -join="leader"
+    volumes:
+      - consul-data-replica-1:/consul/data
+    environment:
+      - CONSUL_BIND_INTERFACE=eth0
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true}'
+    networks:
+      - proxy-main
+    deploy:
+      replicas: ${CONSUL_REPLICAS:-3}
+      placement:
+        preferences:
+          - spread: node.id # Data ceneter, 'spread=node.labels.datacenter, datacenter=us-west,
+      labels:
+        - traefik.enable=false
+
+volumes:
+  consul-data-leader-1:
+  consul-data-replica-1:
+
+networks:
+  proxy-main:
+    external: true

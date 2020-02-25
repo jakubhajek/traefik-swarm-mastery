@@ -1,0 +1,62 @@
+log:
+  level: info
+  format: json
+
+accessLog:
+  format: json
+  bufferingSize: 5
+
+providers:
+  docker:
+    watch: true
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    swarmMode: true
+    network: proxy-main
+    swarmModeRefreshSeconds: 5
+
+  consulCatalog:
+    exposedByDefault: false
+    refreshInterval: 15
+    stale: true
+    cache: true
+    endpoint:
+      address: "http://consul-leader:8500"
+      scheme: foobar
+
+  file:
+    directory: /conf.d
+    watch: true
+
+entryPoints:
+  web:
+    address: ":80"
+    forwardedHeaders:
+      insecure: true
+
+  websecure:
+    address: ":443"
+    forwardedHeaders:
+      insecure: true
+
+  ping:
+    address: ":8082"
+  metrics:
+    address: ":8083"
+
+ping:
+  entryPoint: ping
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+
+certificatesResolvers:
+  le:
+    acme:
+      email: kuba@cometari.com
+      storage: /letsencrypt/acme.json
+      tlsChallenge: true
+
+api:
+  dashboard: true

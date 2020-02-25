@@ -1,0 +1,62 @@
+# docker stack deploy -c stack-canary.yml canary --with-registry-auth --prune
+version: "3.7"
+
+services:
+  app1:
+    image: jakubhajek/app1-node:v1
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+      interval: 3s
+      timeout: 1s
+      retries: 1
+      start_period: 5s
+    networks:
+      - proxy-main
+    deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        failure_action: rollback
+        parallelism: 1
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.app1.rule=Host(`canary.labs.cometari.eu`)"
+        - "traefik.http.routers.app1.tls.certresolver=le"
+        - "traefik.http.routers.app1.entrypoints=websecure"
+
+        # Canary approach
+        - "traefik.http.routers.app1.service=canary@file"
+
+        - "traefik.http.services.app1_svc.loadbalancer.server.port=3000"
+
+  app2:
+    image: jakubhajek/app1-node:v2
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+      interval: 3s
+      timeout: 1s
+      retries: 1
+      start_period: 5s
+    networks:
+      - proxy-main
+    deploy:
+      mode: replicated
+      replicas: 2
+      resources:
+        limits:
+          memory: 128M
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.services.app2_svc.loadbalancer.server.port=3000"
+
+networks:
+  proxy-main:
+    external: true

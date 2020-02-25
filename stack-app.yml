@@ -1,0 +1,83 @@
+# docker stack deploy -c stack-app.yml app --with-registry-auth --prune
+version: "3.7"
+
+services:
+  backend:
+    image: jakubhajek/nodejs-backend:latest
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:3000/ || exit 1
+      interval: 3s
+      timeout: 1s
+      retries: 1
+      start_period: 5s
+    networks:
+      - app
+    deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        failure_action: rollback
+        parallelism: 1
+        delay: 5s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 128M
+
+  frontend:
+    image: nginx:1.17-alpine
+    healthcheck:
+      test: wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
+      interval: 3s
+      timeout: 1s
+      retries: 3
+      start_period: 5s
+    networks:
+      - app
+      - proxy-main
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/nginx.conf
+    deploy:
+      mode: replicated
+      replicas: 2
+      update_config:
+        failure_action: rollback
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.myapp.rule=Host(`node-app.labs.cometari.eu`)"
+        - "traefik.http.routers.myapp.tls.certresolver=le"
+        - "traefik.http.routers.myapp.entrypoints=websecure,web"
+        - "traefik.http.services.myapp.loadbalancer.server.port=80"
+        - "traefik.http.services.myapp.loadbalancer.passhostheader=true"
+        - "traefik.http.services.myapp.loadbalancer.healthcheck.path=/healthcheck"
+        - "traefik.http.services.myapp.loadbalancer.healthcheck.interval=100ms"
+        - "traefik.http.services.myapp.loadbalancer.healthcheck.timeout=75ms"
+        - "traefik.http.services.myapp.loadbalancer.healthcheck.scheme=http"
+      resources:
+        limits:
+          memory: 128MB
+
+configs:
+  nginx_config:
+    name: nginx-config-${NGINX_CONFIG:-1}
+    file: ./nginx.conf
+
+networks:
+  app:
+    driver: overlay
+    name: app
+    attachable: true
+    driver_opts:
+      encrypted: "true"
+  proxy-main:
+    external: true

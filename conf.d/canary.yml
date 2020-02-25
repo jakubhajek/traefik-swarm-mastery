@@ -1,0 +1,10 @@
+http:
+  services:
+    canary:
+      weighted:
+        services:
+          # Load balancing between Traefik services
+          - name: app1_svc@docker
+            weight: 1
+          - name: app2_svc@docker
+            weight: 5

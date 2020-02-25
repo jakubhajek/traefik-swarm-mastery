@@ -1,0 +1,52 @@
+[http]
+    [http.routers]
+        [http.routers.redirecttohttps]
+             entryPoints = ["web"]
+             middlewares = ["https-redirect"]
+             rule = "HostRegexp(`{host:.+}`)"
+             service = "noop"
+
+        [http.routers.router0]
+            entryPoints = ["websecure", "web"]
+            middlewares = ["https-redirect", "security-headers"]
+            service = "b1"
+            rule = "Host(`sm.aele8noh.4static.pl`)"
+            [http.routers.router0.tls]
+                #certResolver = "le"
+                options = "default"
+
+        [http.routers.router1]
+            entryPoints = ["websecure", "web"]
+            middlewares = ["https-redirect", "security-headers"]
+            service = "b1"
+            rule = "Host(`bo.ongu0cha.4static.pl`)"
+            [http.routers.router1.tls]
+                #certResolver = "le"
+                options = "default"
+
+        [http.routers.router2]
+            entryPoints = ["websecure", "web"]
+            middlewares = ["https-redirect", "security-headers"]
+            service = "b0"
+            rule = "Host(`sh.ui0weis3.4static.pl`)"
+            [http.routers.router2.tls]
+                #certResolver = "le"
+                options = "default"  
+
+    [http.services]
+        [http.services.b0]
+            [http.services.b0.loadBalancer]
+                passHostHeader = true
+                [[http.services.b0.loadBalancer.servers]]
+                    url = "http://node3vm.ids/"
+
+        [http.services.b1]
+            [http.services.b1.loadBalancer] 
+                passHostHeader = true
+                [[http.services.b1.loadBalancer.servers]]
+                    url = "http://172.16.0.52/" 
+
+        [http.services.noop]
+           [http.services.noop.loadBalancer]
+             [[http.services.noop.loadBalancer.servers]]
+                    url = "http://localhost"

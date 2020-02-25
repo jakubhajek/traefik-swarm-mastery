@@ -1,0 +1,97 @@
+# docker stack deploy -c stack-tr-main.yml traefik --prune
+
+version: "3.7"
+services:
+  main:
+    image: traefik:v2.1.2
+    healthcheck:
+      test: wget --quiet --tries=1 --spider https://traefik.labs.cometari.eu/ping || exit 1
+      interval: 3s
+      timeout: 1s
+      retries: 3
+      start_period: 1s
+    ports:
+      - "80:80"
+      - "443:443"
+    configs:
+      # Dynamic config
+      - source: routers-config
+        target: /conf.d/routers.toml
+      - source: middlewares-config
+        target: /conf.d/middlewares.toml
+      - source: tls-config
+        target: /conf.d/tls.toml
+      - source: canary-config
+        target: /conf.d/canary.yml
+
+      # Static config
+      - source: traefik-config
+        target: /traefik.yml
+    networks:
+      - proxy-main
+    volumes:
+      - "traefik-certificates:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+          - node.labels.traefik == true
+      update_config:
+        # https://docs.docker.com/compose/compose-file/#update_config
+        order: start-first
+
+      labels:
+        - "traefik.enable=true" # Enable Traefik, because we disabled expose a service by default
+
+        - "traefik.http.routers.t.rule=Host(`traefik.labs.cometari.eu`)" # Tell Traefik to create routre 't' and catch all requests with given Host
+        - "traefik.http.routers.t.service=api@internal" # the router 't' will forward request to service api@internal
+
+        - "traefik.http.routers.t.tls.certresolver=le" # the router 't' will use TLS certresolver called LE
+        - "traefik.http.routers.t.entrypoints=websecure" # the router 't' should listen on both entrypoints
+
+        #- "traefik.http.services.t.loadbalancer.server.port=8080" # the router 't' will balance incoming requests between servers listens on port 8080
+        # - "traefik.http.services.t.loadbalancer.passhostheader=true"
+
+        - "traefik.http.routers.t.middlewares=authtraefik" # Tell Traefik, that for router 't' should use following middleware
+        - "traefik.http.middlewares.authtraefik.basicauth.users=admin:$$2y$$05$$1OX5jZ1Kpm/iVKE8tgUhu.STmPkgi0lLxVeP5yEcRioFdV4mcgdTu" #  Tell Traefik to creat middleware for the give name with following credntails (bcrypt)
+
+        - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)" # global redirect to https
+        - "traefik.http.routers.http-catchall.entrypoints=web"
+        - "traefik.http.routers.http-catchall.middlewares=redirect-to-https"
+        - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
+        - "traefik.http.routers.ping.rule=Host(`traefik.labs.cometari.eu`) && Path(`/ping`)"
+        - "traefik.http.routers.ping.service=ping@internal"
+        - "traefik.http.routers.ping.tls.certresolver=le"
+        - "traefik.http.routers.ping.tls=true"
+
+        # Dummy service for Docker Swarm
+        - "traefik.http.services.dummy-service.loadbalancer.server.port=59999"
+
+networks:
+  proxy-main:
+    driver: overlay
+    attachable: true
+    name: proxy-main
+
+volumes:
+  traefik-certificates:
+
+configs:
+  routers-config:
+    name: routers-config-${CONFIG:-3}
+    file: ./conf.d/routers.toml
+  middlewares-config:
+    name: middlewares-config-${CONFIG:-1}
+    file: ./conf.d/middlewares.toml
+  tls-config:
+    name: tls-config-${CONFIG:-1}
+    file: ./conf.d/tls.toml
+  canary-config:
+    name: canary-config-${CONFIG:-22}
+    file: ./conf.d/canary.yml
+
+  traefik-config:
+    name: traefik-config-${CONFIG:-8}
+    file: ./traefik.yml
